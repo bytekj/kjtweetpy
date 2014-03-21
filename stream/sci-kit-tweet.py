@@ -6,12 +6,12 @@ Created on Feb 7, 2014
 import json
 import sys
 
-import nltk
 import tweepy
-from nltk.corpus import brown
+
 from tweepy import OAuthHandler, Stream
 from tweepy.streaming import StreamListener
 
+from scikits.learn.features.text import WordNGramAnalyzer
 
 #import sys
 # following four keys are provided by twitter
@@ -20,52 +20,6 @@ consumer_secret="ZsyLG0t1H4WWtwewdp12fbIJyZre6aE306JP9sY"
 
 access_token="19610295-TtV1mgxk09JYW4GQFFBY2nzvDGaWAtRwa3yfTdmds"
 access_token_secret="gQYrVkmvXKo821HZmwIFBhuISKIIgMB3m3r96QdQfIY"
-
-many_tagged_sents= brown.tagged_sents()
-unigram_tagger = nltk.UnigramTagger(many_tagged_sents)
-
-# graph contains elements as [(Noun, Verb, Noun) .... ] where all three come consecutively in the tweet
-graph = []
-
-
-
-
-def find_edge(index, tagged_tweet):
-    
-    for i in range(index, len(tagged_tweet)):
-        (edge,t) = tagged_tweet[i] 
-        if type(t) == str and t.startswith('V'):
-            return (i,edge)
-    return (-1,False)
-
-def get_next_node(index,tagged_tweet):
-    for i in range(index, len(tagged_tweet)):
-        (w,t) = tagged_tweet[i]
-        if t == 'NN':
-            return w
-    return False
-                                 
-def node_exists(node):
-    (n1,e,n2) = node
-    try:
-        graph.index((n1,e,n2))
-        graph.index((n2,e,n1))
-    except ValueError:
-        return False
-    return True
-
-def add_to_graph(tagged_tweet):
-    list_of_nodes = [(w, t) for (w,t) in tagged_tweet if len(w) > 1 and t == 'NN']
-    for (w,t) in list_of_nodes:
-        index_NN1 = tagged_tweet.index((w,t)) +1
-        (edge_index, edge) = find_edge(index_NN1,tagged_tweet)
-        if edge != False:
-            next_NN = get_next_node(edge_index+1, tagged_tweet)
-            if next_NN != False:
-                if node_exists((w,edge,next_NN)) == False:
-                    graph.append((w,edge,next_NN))
-    return True
-
 
 class StdOutListener(StreamListener):
     """ A listener handles tweets are the received from the stream.
@@ -85,13 +39,8 @@ class StdOutListener(StreamListener):
                     tweet_text = parsed_json['text'].encode(sys.stdout.encoding, 'replace')
                 else:      
                     tweet_text = parsed_json['text']
-                tagged_sent = unigram_tagger.tag(nltk.word_tokenize(tweet_text)) 
-                for (w,t) in tagged_sent:
-                    if t==None:
-                        new_tagged_sent.append((w,'NN'))
-                    else:
-                        new_tagged_sent.append((w,t))
                 
+                new_tagged_sent = WordNGramAnalyzer(min_n=1, max_n=2).analyze(tweet_text)
                 print tweet_text
                 print new_tagged_sent
                 
@@ -103,9 +52,6 @@ class StdOutListener(StreamListener):
 
     def on_error(self, status):
         print status
-      
-#def test_graph():
-    
 
 if __name__ == '__main__':
     l = StdOutListener()
