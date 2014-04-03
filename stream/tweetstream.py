@@ -7,10 +7,13 @@ import json
 import sys
 
 import nltk
+import pickle
 import tweepy
 from nltk.corpus import brown
 from tweepy import OAuthHandler, Stream
 from tweepy.streaming import StreamListener
+from nltk.collocations import *
+#import nltk_trainer
 
 
 #import sys
@@ -21,50 +24,18 @@ consumer_secret="ZsyLG0t1H4WWtwewdp12fbIJyZre6aE306JP9sY"
 access_token="19610295-TtV1mgxk09JYW4GQFFBY2nzvDGaWAtRwa3yfTdmds"
 access_token_secret="gQYrVkmvXKo821HZmwIFBhuISKIIgMB3m3r96QdQfIY"
 
-many_tagged_sents= brown.tagged_sents()
-unigram_tagger = nltk.UnigramTagger(many_tagged_sents)
+#many_tagged_sents= brown.tagged_sents()
+#unigram_tagger = nltk.UnigramTagger(many_tagged_sents)
 
+
+trained_tagger = nltk.data.load("taggers/treebank_NaiveBayes_ubt.pickle")
+
+#trained_chunker = nltk.data.load("chunkers/treebank_chunk_NaiveBayes.pickle")
 # graph contains elements as [(Noun, Verb, Noun) .... ] where all three come consecutively in the tweet
-graph = []
 
+bigram_measures = nltk.collocations.BigramAssocMeasures()
+trigram_measures = nltk.collocations.TrigramAssocMeasures()
 
-
-
-def find_edge(index, tagged_tweet):
-    
-    for i in range(index, len(tagged_tweet)):
-        (edge,t) = tagged_tweet[i] 
-        if type(t) == str and t.startswith('V'):
-            return (i,edge)
-    return (-1,False)
-
-def get_next_node(index,tagged_tweet):
-    for i in range(index, len(tagged_tweet)):
-        (w,t) = tagged_tweet[i]
-        if t == 'NN':
-            return w
-    return False
-                                 
-def node_exists(node):
-    (n1,e,n2) = node
-    try:
-        graph.index((n1,e,n2))
-        graph.index((n2,e,n1))
-    except ValueError:
-        return False
-    return True
-
-def add_to_graph(tagged_tweet):
-    list_of_nodes = [(w, t) for (w,t) in tagged_tweet if len(w) > 1 and t == 'NN']
-    for (w,t) in list_of_nodes:
-        index_NN1 = tagged_tweet.index((w,t)) +1
-        (edge_index, edge) = find_edge(index_NN1,tagged_tweet)
-        if edge != False:
-            next_NN = get_next_node(edge_index+1, tagged_tweet)
-            if next_NN != False:
-                if node_exists((w,edge,next_NN)) == False:
-                    graph.append((w,edge,next_NN))
-    return True
 
 
 class StdOutListener(StreamListener):
@@ -85,18 +56,35 @@ class StdOutListener(StreamListener):
                     tweet_text = parsed_json['text'].encode(sys.stdout.encoding, 'replace')
                 else:      
                     tweet_text = parsed_json['text']
-                tagged_sent = unigram_tagger.tag(nltk.word_tokenize(tweet_text)) 
-                for (w,t) in tagged_sent:
-                    if t==None:
-                        new_tagged_sent.append((w,'NN'))
-                    else:
-                        new_tagged_sent.append((w,t))
+                tokens = nltk.word_tokenize(tweet_text)
+                tagged_sent = trained_tagger.tag(tokens) 
+
+                #for (w,t) in tagged_sent:
+                #    if t==None:
+                #        new_tagged_sent.append((w,'NN'))
+                #    else:
+                #        new_tagged_sent.append((w,t))
                 
                 print tweet_text
-                print new_tagged_sent
-                
-                add_to_graph(new_tagged_sent)
+                #print new_tagged_sent
+                #chunks = trained_chunker.parse(tagged_sent)
+                #print tagged_sent
+                #add_to_graph(new_tagged_sent)
                 #print 'Accuracy: %4.1f%%' % (100.0 * unigram_tagger.evaluate(tagged_sent))
+                
+                for chunk in nltk.ne_chunk(tagged_sent):
+                    if hasattr(chunk, 'node'):
+                        print chunk.node, ' '.join(c[0] for c in chunk.leaves())
+
+                bigram_finder = BigramCollocationFinder.from_words(tokens)
+                bigram_collocations = bigram_finder.nbest(bigram_measures.pmi, 3)
+                trigram_finder = TrigramCollocationFinder.from_words(tokens)
+                trigram_collocations = trigram_finder.nbest(trigram_measures.pmi,3)
+
+                print bigram_collocations
+
+                print trigram_collocations
+
         except   UnicodeEncodeError:
             print "error in ", parsed_json 
         return True
@@ -115,5 +103,5 @@ if __name__ == '__main__':
     stream = Stream(auth, l)
     
     #track=['costa'] is the topic of twitter data stream
-    stream.filter(track=['python'])
+    stream.filter(track=['cricket'])
     #stream.sample()
