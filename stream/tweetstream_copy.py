@@ -13,9 +13,10 @@ from nltk.corpus import brown
 from tweepy import OAuthHandler, Stream
 from tweepy.streaming import StreamListener
 from nltk.collocations import *
+import pickle
+import time
+
 #import nltk_trainer
-
-
 #import sys
 # following four keys are provided by twitter
 consumer_key="WxlLPjHHynHASubxXPtuHQ"
@@ -30,22 +31,30 @@ access_token_secret="gQYrVkmvXKo821HZmwIFBhuISKIIgMB3m3r96QdQfIY"
 
 trained_tagger = nltk.data.load("taggers/treebank_NaiveBayes_ubt.pickle")
 
+trained_chunker = nltk.data.load("chunkers/treebank_chunk_NaiveBayes.pickle")
+
+trained_classifier = nltk.data.load("classifiers/movie_reviews_NaiveBayes.pickle")
+
 #trained_chunker = nltk.data.load("chunkers/treebank_chunk_NaiveBayes.pickle")
 # graph contains elements as [(Noun, Verb, Noun) .... ] where all three come consecutively in the tweet
 
 bigram_measures = nltk.collocations.BigramAssocMeasures()
-trigram_measures = nltk.collocations.TrigramAssocMeasures()
+# trigram_measures = nltk.collocations.TrigramAssocMeasures()
 
+print "Unpacking pickle"
+nbc_pkl = open('nbc.pkl', 'rb')
 
+print "Getting the plates ready"
+nbc = pickle.load(nbc_pkl)
 
+print "feed me tweets"
 class StdOutListener(StreamListener):
     """ A listener handles tweets are the received from the stream.
     This is a basic listener that just prints received tweets to stdout.
-
     """
-    
         
     def on_data(self, data):
+        t1 = time.time()*1000
         parsed_json =json.loads(data)
         new_tagged_sent = []
         try:
@@ -56,6 +65,8 @@ class StdOutListener(StreamListener):
                     tweet_text = parsed_json['text'].encode(sys.stdout.encoding, 'replace')
                 else:      
                     tweet_text = parsed_json['text']
+
+                tweet_text = tweet_text.decode('utf-8')
                 tokens = nltk.word_tokenize(tweet_text)
                 tagged_sent = trained_tagger.tag(tokens) 
 
@@ -65,25 +76,46 @@ class StdOutListener(StreamListener):
                 #    else:
                 #        new_tagged_sent.append((w,t))
                 
-                print tweet_text
+                
                 #print new_tagged_sent
                 #chunks = trained_chunker.parse(tagged_sent)
                 #print tagged_sent
                 #add_to_graph(new_tagged_sent)
                 #print 'Accuracy: %4.1f%%' % (100.0 * unigram_tagger.evaluate(tagged_sent))
-                
+                named_entities = []
                 for chunk in nltk.ne_chunk(tagged_sent):
-                    if hasattr(chunk, 'node'):
-                        print chunk.node, ' '.join(c[0] for c in chunk.leaves())
+                     if hasattr(chunk, 'node'):
+                         named_entities= [(chunk.node, ' '.join(c[0] for c in chunk.leaves()))]
 
-                bigram_finder = BigramCollocationFinder.from_words(tokens)
-                bigram_collocations = bigram_finder.nbest(bigram_measures.pmi, 3)
-                trigram_finder = TrigramCollocationFinder.from_words(tokens)
-                trigram_collocations = trigram_finder.nbest(trigram_measures.pmi,3)
+                # trained_chunker.parse()
 
-                print bigram_collocations
+                # bigram_finder = BigramCollocationFinder.from_words(tokens)
+                # bigram_collocations = bigram_finder.nbest(bigram_measures.pmi, 3)
+                # trigram_finder = TrigramCollocationFinder.from_words(tokens)
+                # trigram_collocations = trigram_finder.nbest(trigram_measures.pmi,3)
 
-                print trigram_collocations
+                # print bigram_collocations
+                feats = dict([(word, True) for word in tokens])
+                label = trained_classifier.classify(feats)
+                # print "--------------------------------------------------------------------"
+                print tweet_text
+                for entity in named_entities:
+                    (entity_type,entity_val) = entity
+                    print "Entity: "+str(entity_val)+" | Entity type: "+str(entity_type)
+
+                sentiment = ""
+                if label == "pos":
+                    sentiment = "Positive"
+                else:
+                    sentiment = "Negetive"
+                t2 = time.time()*1000
+                print "Tweet is: "+sentiment
+                time_required = t2-t1
+
+                print "Time required for analysis: "+str(int(round(time_required)))+" miliseconds"
+                print "--------------------------------------------------------------------"
+                # nbc.update([(tweet_text,label)])
+                # print trigram_collocations
 
         except   UnicodeEncodeError:
             print "error in ", parsed_json 
@@ -103,5 +135,5 @@ if __name__ == '__main__':
     stream = Stream(auth, l)
     
     #track=['costa'] is the topic of twitter data stream
-    stream.filter(track=['cricket'])
+    stream.filter(track=['football'], encoding='utf-8')
     #stream.sample()
